@@ -22,4 +22,5 @@ type IPV6Header struct {
 }
 
 func (h *IPV6Header) Marshal() ([]byte, error) {
+	return nil, nil
 }

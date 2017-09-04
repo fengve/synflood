@@ -2,9 +2,6 @@ package main
 
 import (
 	"encoding/binary"
-	"fmt"
-	"net"
-	"runtime"
 	"syscall"
 )
 
@@ -33,9 +30,7 @@ func (h *tcpHeader) Marshal() ([]byte, error) {
 	if h == nil {
 		return nil, syscall.EINVAL
 	}
-	if h.Len < tcpHeaderLen {
-		return nil, errHeaderTooShort
-	}
+
 	hdrlen := tcpHeaderLen + len(h.Options)
 	b := make([]byte, hdrlen)
 
@@ -43,10 +38,10 @@ func (h *tcpHeader) Marshal() ([]byte, error) {
 	binary.BigEndian.PutUint16(b[0:2], uint16(h.Src))
 	binary.BigEndian.PutUint16(b[2:4], uint16(h.Dst))
 
-	binary.BigEndian.PutUint16(b[4:8], uint32(h.Seq))
-	binary.BigEndian.PutUint16(b[8:12], uint32(h.Ack))
+	binary.BigEndian.PutUint32(b[4:8], uint32(h.Seq))
+	binary.BigEndian.PutUint32(b[8:12], uint32(h.Ack))
 
-	b[12] = hdrlen/4<<4 | 0
+	b[12] = uint8(hdrlen/4<<4 | 0)
 	//TODO  Rsvd
 
 	b[13] = uint8(h.Flag)

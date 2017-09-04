@@ -2,9 +2,8 @@ package main
 
 import (
 	"encoding/binary"
-	"fmt"
+	"errors"
 	"net"
-	"runtime"
 	"syscall"
 )
 
@@ -32,13 +31,11 @@ type ipv4Header struct {
 }
 
 // Marshal encode ipv4 header
-func (h *IPV4Header) Marshal() ([]byte, error) {
+func (h *ipv4Header) Marshal() ([]byte, error) {
 	if h == nil {
 		return nil, syscall.EINVAL
 	}
-	if h.Len < ipv4HeaderLen {
-		return nil, errHeaderTooShort
-	}
+
 	hdrlen := ipv4HeaderLen + len(h.Options)
 	b := make([]byte, hdrlen)
 
@@ -64,7 +61,7 @@ func (h *IPV4Header) Marshal() ([]byte, error) {
 	if ip := h.Dst.To4(); ip != nil {
 		copy(b[16:20], ip[:net.IPv4len])
 	} else {
-		return nil, errMissingAddress
+		return nil, errors.New("missing address")
 	}
 
 	if len(h.Options) > 0 {

