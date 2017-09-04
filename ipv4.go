@@ -14,6 +14,7 @@ const (
 	ipv4MaxHeaderLen = 60
 )
 
+// A ipv4 header
 type ipv4Header struct {
 	Version  int    // 协议版本 4bit
 	Len      int    // 头部长度 4bit
@@ -30,6 +31,7 @@ type ipv4Header struct {
 	Options  []byte // 选项, extension headers
 }
 
+// Marshal encode ipv4 header
 func (h *IPV4Header) Marshal() ([]byte, error) {
 	if h == nil {
 		return nil, syscall.EINVAL

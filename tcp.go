@@ -13,6 +13,7 @@ const (
 	tcpMaxHeaderLen = 60
 )
 
+// A tcp header
 type tcpHeader struct {
 	Src     int    //源端口
 	Dst     int    //目的端口
@@ -27,6 +28,7 @@ type tcpHeader struct {
 	Options []byte // 选项, extension headers
 }
 
+// Marshal encode tcp header
 func (h *tcpHeader) Marshal() ([]byte, error) {
 	if h == nil {
 		return nil, syscall.EINVAL
