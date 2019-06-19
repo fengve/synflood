@@ -145,7 +145,6 @@ func getTcpHeader( srcIp,dstIp net.IP, dstPort int) ([]byte, error) {
 	h.Win = 2048
 
 	b, _ := h.Marshal()
-	fmt.Printf(" Marshal %v %v\n",h,b )
 	
 	
     var (
@@ -167,7 +166,6 @@ func getTcpHeader( srcIp,dstIp net.IP, dstPort int) ([]byte, error) {
     binary.Write(&buffer, binary.BigEndian, psdheader)
 	buffs,_ := h.Marshal()
     buffer.Write(buffs)
-	fmt.Printf(" check%v \n",buffer.Bytes() )
 	h.Sum = int(CheckSum(buffer.Bytes()))
 	return h.Marshal()
 }
