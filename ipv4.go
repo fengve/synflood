@@ -29,6 +29,7 @@ type ipv4Header struct {
 	Dst      net.IP // 目的IP  	32bit
 	Options  []byte // 选项, extension headers
 }
+// 
 
 // Marshal encode ipv4 header
 func (h *ipv4Header) Marshal() ([]byte, error) {
